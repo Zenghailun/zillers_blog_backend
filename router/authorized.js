@@ -16,13 +16,14 @@ router.post("/upload", (req, res) => {
       return;
     }
     const [chunk] = files.chunk;
-    const [hash] = fields.hash;
+    const [sliceHash] = fields.sliceHash;
     const [fileName] = fields.fileName;
-    const chunkDir = path.resolve(UPLOAD_DIR, "chunkDir" + fileName);
+    const [fileHash] = fields.fileHash;
+    const chunkDir = path.resolve(UPLOAD_DIR, "chunkDir" + fileHash);
     if (!fse.existsSync(chunkDir)) {
       await fse.mkdirs(chunkDir);
     }
-    await fse.move(chunk.path, `${chunkDir}/${hash}`);
+    await fse.move(chunk.path, `${chunkDir}/${sliceHash}`);
     res.send(
       `Upload completed! Here's the info of uploaded files: ${JSON.stringify(
         files
@@ -54,7 +55,7 @@ const pipeStream = (path, writeStream) =>
   });
 
 const mergeFileChunk = async (filePath, fileName, fileHash, size) => {
-  const chunkDir = path.resolve(UPLOAD_DIR, "chunkDir" + fileName);
+  const chunkDir = path.resolve(UPLOAD_DIR, "chunkDir" + fileHash);
   const chunkPaths = await fse.readdir(chunkDir);
   chunkPaths.sort((a, b) => a.split("-")[1] - b.split("-")[1]);
   Promise.all(
@@ -70,6 +71,13 @@ const mergeFileChunk = async (filePath, fileName, fileHash, size) => {
     fse.rmdirSync(chunkDir);
   });
 };
+
+//返回已上传的所有切片
+const createUploadedList = async fileHash => 
+  fse.existsSync(path.resolve(UPLOAD_DIR, fileHash)) 
+  ? await fse.readdir(path.resolve(UPLOAD_DIR, fileHash))
+  : []
+
 
 router.post("/merge", async (req, res) => {
   const data = await resolvePost(req);
@@ -96,7 +104,8 @@ router.post("/verify", async (req, res) => {
     }))
   }else{
     res.end(JSON.stringify({
-      shouldUpload: true
+      shouldUpload: true,
+      uploadedList: await createUploadedList(fileHash)
     }))
   }
 });
