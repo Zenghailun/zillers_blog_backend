@@ -74,15 +74,14 @@ const mergeFileChunk = async (filePath, fileName, fileHash, size) => {
 
 //返回已上传的所有切片
 const createUploadedList = async fileHash => 
-  fse.existsSync(path.resolve(UPLOAD_DIR, fileHash)) 
-  ? await fse.readdir(path.resolve(UPLOAD_DIR, fileHash))
+  fse.existsSync(path.resolve(UPLOAD_DIR, "chunkDir"+fileHash)) 
+  ? await fse.readdir(path.resolve(UPLOAD_DIR, "chunkDir"+fileHash))
   : []
 
 
 router.post("/merge", async (req, res) => {
   const data = await resolvePost(req);
   const { fileName, fileHash, size } = data;
-  console.log(fileName)
   const prefixName = fileName.split('.').slice(0, -1).join('.'), suffixName = fileName.split('.').slice(-1)
   const filePath = path.resolve(UPLOAD_DIR, `${prefixName}${fileHash}.${suffixName}`);
   await mergeFileChunk(filePath, fileName, fileHash, size);
@@ -94,6 +93,31 @@ router.post("/merge", async (req, res) => {
   );
 });
 
+const checkFileExistsWithHash = async(directory, hash) => {
+  try {
+    // 读取目录内容
+    const files = await fse.readdir(directory);
+    
+    // 遍历目录中的每个文件/文件夹
+    for (const file of files) {
+      const filePath = path.join(directory, file);
+      const stats = await fse.stat(filePath);
+      
+      // 确保它是一个文件
+      if (stats.isFile()) {
+        // 检查文件名是否包含指定的哈希值
+        if (file.includes(hash)) {
+          return true;  // 找到了包含哈希值的文件
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error checking files:', error);
+  }
+  
+  return false;
+}
+
 router.post("/verify", async (req, res) => {
   const data = await resolvePost(req);
   const { fileHash } = data;
@@ -103,25 +127,14 @@ router.post("/verify", async (req, res) => {
       shouldUpload: false
     }))
   }else{
+    const uploadedList = await createUploadedList(fileHash)
     res.end(JSON.stringify({
       shouldUpload: true,
-      uploadedList: await createUploadedList(fileHash)
+      uploadedList
     }))
   }
 });
 
-function checkFileExistsWithHash(directory, hash){
-  return new Promise((resolve, reject) => {
-    fse.readdir(directory, (err, files) => {
-      if(err){
-        reject(err);
-        return;
-      }
-      const fileFound = files.find(file => file.includes(hash))
-      resolve(fileFound !== undefined)
-    })
-  })
-}
 
 // 向外共享路由对象
 module.exports = router;
